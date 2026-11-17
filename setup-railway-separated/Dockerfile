@@ -33,6 +33,10 @@ RUN apt-get update \
 # /home/frappe 0770, which turns every static file into a 404.
 RUN chmod o+x /home/frappe
 
+# Our server block (conf.d/default.conf) is the default for every hostname;
+# Debian's stock default site would otherwise answer unknown hosts.
+RUN rm -f /etc/nginx/sites-enabled/default
+
 # Australian localisation: the app's code lives in the image (apps/ is not on
 # the volume). get-app adds it to apps.txt and builds its assets, so it must run
 # before built_sites is copied. railway-cmd.sh installs it on the site.

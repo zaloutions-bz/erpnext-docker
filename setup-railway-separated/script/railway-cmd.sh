@@ -43,6 +43,15 @@ if ! su frappe -c "bench --site ${RFP_DOMAIN_NAME} list-apps" 2>/dev/null | grep
     su frappe -c "bench --site ${RFP_DOMAIN_NAME} install-app erpnext_australian_localisation"
 fi
 
+# The site name (RFP_DOMAIN_NAME) is internal; links the site generates outside a
+# request (emails, background jobs) use host_name. RFP_PUBLIC_HOST overrides the
+# Railway domain, e.g. for a custom domain.
+PUBLIC_HOST="${RFP_PUBLIC_HOST:-$RAILWAY_PUBLIC_DOMAIN}"
+if [ -n "$PUBLIC_HOST" ]; then
+    echo "-> Setting public URL to https://${PUBLIC_HOST}"
+    su frappe -c "bench --site ${RFP_DOMAIN_NAME} set-config host_name 'https://${PUBLIC_HOST}'"
+fi
+
 echo "-> Clearing cache"
 su frappe -c "bench --site ${RFP_DOMAIN_NAME} execute frappe.cache_manager.clear_global_cache"
 
