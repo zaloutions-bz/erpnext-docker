@@ -28,6 +28,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /tmp/*
 
+# nginx workers run as www-data and must traverse /home/frappe to serve
+# /assets and site public files. The base image published 2026-11-15 makes
+# /home/frappe 0770, which turns every static file into a 404.
+RUN chmod o+x /home/frappe
+
+# Australian localisation: the app's code lives in the image (apps/ is not on
+# the volume). get-app adds it to apps.txt and builds its assets, so it must run
+# before built_sites is copied. railway-cmd.sh installs it on the site.
+RUN su frappe -c "cd /home/frappe/frappe-bench && bench get-app --branch=version-16 https://github.com/Arus-Info/ERPNext-Australian-Localisation.git" \
+    && grep -qxF "erpnext_australian_localisation" /home/frappe/frappe-bench/sites/apps.txt
+
 # copy built_sites from sites
 RUN mkdir -p /home/frappe/frappe-bench/built_sites \
     && cp -r /home/frappe/frappe-bench/sites/assets /home/frappe/frappe-bench/built_sites/assets \
