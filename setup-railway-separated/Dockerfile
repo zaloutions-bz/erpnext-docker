@@ -43,6 +43,15 @@ RUN rm -f /etc/nginx/sites-enabled/default
 RUN su frappe -c "cd /home/frappe/frappe-bench && bench get-app --branch=version-16 https://github.com/Arus-Info/ERPNext-Australian-Localisation.git" \
     && grep -qxF "erpnext_australian_localisation" /home/frappe/frappe-bench/sites/apps.txt
 
+# strata_guard: refuses report requests for a Company the caller may not read
+# (apps/strata_guard/README.md). Like the localisation, its code lives in the
+# image and railway-cmd.sh installs it on the site.
+COPY --chown=frappe ./apps/strata_guard /home/frappe/frappe-bench/apps/strata_guard
+RUN su frappe -c "cd /home/frappe/frappe-bench && ./env/bin/python -m pip install --quiet --no-deps -e apps/strata_guard" \
+    && (grep -qxF "strata_guard" /home/frappe/frappe-bench/sites/apps.txt \
+        || { [ -z "$(tail -c1 /home/frappe/frappe-bench/sites/apps.txt)" ] || echo >> /home/frappe/frappe-bench/sites/apps.txt; \
+             echo "strata_guard" >> /home/frappe/frappe-bench/sites/apps.txt; })
+
 # copy built_sites from sites
 RUN mkdir -p /home/frappe/frappe-bench/built_sites \
     && cp -r /home/frappe/frappe-bench/sites/assets /home/frappe/frappe-bench/built_sites/assets \

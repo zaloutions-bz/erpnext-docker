@@ -36,12 +36,16 @@ fi
 # even if common_site_config.json lost it.
 su frappe -c "bench use ${RFP_DOMAIN_NAME}"
 
-# Install the Australian localisation (built into the image) on the site, once.
-# Covers new sites and ones created before the app was added to the image.
-if ! su frappe -c "bench --site ${RFP_DOMAIN_NAME} list-apps" 2>/dev/null | grep -qw erpnext_australian_localisation; then
-    echo "-> Installing Australian localisation"
-    su frappe -c "bench --site ${RFP_DOMAIN_NAME} install-app erpnext_australian_localisation"
-fi
+# Install the apps built into the image on the site, once each: the Australian
+# localisation and strata_guard (report Company checks). Covers new sites and ones
+# created before an app was added to the image.
+INSTALLED_APPS=$(su frappe -c "bench --site ${RFP_DOMAIN_NAME} list-apps" 2>/dev/null || true)
+for app in erpnext_australian_localisation strata_guard; do
+    if ! echo "$INSTALLED_APPS" | grep -qw "$app"; then
+        echo "-> Installing ${app}"
+        su frappe -c "bench --site ${RFP_DOMAIN_NAME} install-app ${app}"
+    fi
+done
 
 # The site name (RFP_DOMAIN_NAME) is internal; links the site generates outside a
 # request (emails, background jobs) use host_name. RFP_PUBLIC_HOST overrides the
