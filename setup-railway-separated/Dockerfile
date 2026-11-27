@@ -28,6 +28,24 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /tmp/*
 
+# AWS CLI v2, for the offsite backup job (script/offsite-backup.sh). Pinned to
+# 2.40.0 (built 2026-11-10) and checked against its zip's SHA-256. When the pin
+# was set (2026-11-27) the zip's signature was verified against AWS's published
+# key, fingerprint FB5D B77F D5C1 18B8 0511 ADA8 A631 0ACC 4672 475C
+# (docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html):
+# verify the new zip's signature the same way before moving the pin. x86_64 only,
+# which is what Railway builds.
+ARG AWSCLI_VERSION=2.40.0
+ARG AWSCLI_SHA256=4a6d34150060a6bc30160ef1f66e536db64674797bbb582044f93bb9c6e299e7
+RUN apt-get update \
+    && apt-get install -y -q --no-install-recommends unzip curl ca-certificates \
+    && curl -fsSL -o /tmp/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-${AWSCLI_VERSION}.zip" \
+    && echo "${AWSCLI_SHA256}  /tmp/awscliv2.zip" | sha256sum -c - \
+    && unzip -q /tmp/awscliv2.zip -d /tmp/awscli \
+    && /tmp/awscli/aws/install \
+    && rm -rf /tmp/awscliv2.zip /tmp/awscli /var/lib/apt/lists/* \
+    && aws --version
+
 # nginx workers run as www-data and must traverse /home/frappe to serve
 # /assets and site public files. The base image published 2026-11-15 makes
 # /home/frappe 0770, which turns every static file into a 404.
@@ -67,6 +85,7 @@ COPY ./template/temp_supervisor.conf /home/frappe/temp_supervisor.conf
 COPY --chown=frappe --chmod=0755 ./script/railway-setup.sh /home/frappe/frappe-bench/railway-setup.sh
 COPY --chown=frappe --chmod=0755 ./script/railway-entrypoint.sh /usr/local/bin/railway-entrypoint.sh
 COPY --chown=frappe --chmod=0755 ./script/railway-cmd.sh /usr/local/bin/railway-cmd.sh
+COPY --chown=frappe --chmod=0755 ./script/offsite-backup.sh /home/frappe/frappe-bench/offsite-backup.sh
 
 USER root
 
