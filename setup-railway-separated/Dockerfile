@@ -1,4 +1,10 @@
-FROM thspacecode/erpnext-docker:version-16-latest
+# Pinned to the base image staging and production were last built on (17-18 Nov
+# 2026). The tag version-16-latest moves every week, and the start script never
+# runs `bench migrate`, so a rebuild on a newer base would run newer Frappe and
+# ERPNext code against the old schema. To upgrade: move the digest (and the
+# localisation commit below), redeploy staging, run `bench migrate` there, then
+# production.
+FROM thspacecode/erpnext-docker:version-16-latest@sha256:57b51b7543c08c5caef6d1fe4081e5eaa82182a502fb5266dab3acf5ba817386
 
 USER root
 
@@ -58,7 +64,14 @@ RUN rm -f /etc/nginx/sites-enabled/default
 # Australian localisation: the app's code lives in the image (apps/ is not on
 # the volume). get-app adds it to apps.txt and builds its assets, so it must run
 # before built_sites is copied. railway-cmd.sh installs it on the site.
-RUN su frappe -c "cd /home/frappe/frappe-bench && bench get-app --branch=version-16 https://github.com/Arus-Info/ERPNext-Australian-Localisation.git" \
+# Pinned to the commit its version-16 branch was at when production was built
+# (922dfd86, 2026-10-20), for the same reason as the base image's digest.
+ARG AU_LOCALISATION_COMMIT=922dfd861fe48d03af19293ceea5277f68d7cb03
+RUN su frappe -c "cd /home/frappe/frappe-bench && bench get-app --branch=version-16 https://github.com/Arus-Info/ERPNext-Australian-Localisation.git \
+        && cd apps/erpnext_australian_localisation \
+        && git fetch --quiet --depth 1 https://github.com/Arus-Info/ERPNext-Australian-Localisation.git ${AU_LOCALISATION_COMMIT} \
+        && git checkout --quiet ${AU_LOCALISATION_COMMIT} \
+        && cd /home/frappe/frappe-bench && bench build --app erpnext_australian_localisation" \
     && grep -qxF "erpnext_australian_localisation" /home/frappe/frappe-bench/sites/apps.txt
 
 # strata_guard: refuses report requests for a Company the caller may not read
