@@ -36,6 +36,38 @@ fi
 # even if common_site_config.json lost it.
 su frappe -c "bench use ${RFP_DOMAIN_NAME}"
 
+# Migrate the site when the image's apps differ from the ones it was last
+# migrated with. The Dockerfile pins every app's version, so this runs once per
+# upgrade, not on every restart. A full backup comes first, onto the volume and,
+# when the offsite job is configured, to S3. If the backup or the migrate fails,
+# the boot stops: new code must not run against an old or half-migrated schema.
+# Nothing is serving yet (nginx and supervisor start below), so the migrate runs
+# with no traffic and no scheduler.
+MIGRATED_MARKER="${SITE_DIR}/.railway-migrated-versions"
+PRE_MIGRATE_DIR="/home/frappe/frappe-bench/sites/pre-migrate-backups"
+IMAGE_VERSIONS="$(su frappe -c "cd /home/frappe/frappe-bench && bench version" 2>/dev/null | grep -E '^[a-z0-9_]+ ' | sort || true)"
+if [ -z "$IMAGE_VERSIONS" ]; then
+    echo "ERROR: could not read the image's app versions (bench version)" >&2
+    exit 1
+fi
+if [ "$(cat "$MIGRATED_MARKER" 2>/dev/null)" != "$IMAGE_VERSIONS" ]; then
+    echo "-> The image's apps differ from the site's last migrate:"
+    echo "$IMAGE_VERSIONS" | sed 's/^/     /'
+    BACKUP_DIR="${PRE_MIGRATE_DIR}/$(date -u +%Y%m%d_%H%M%S)"
+    echo "-> Backing up to ${BACKUP_DIR}"
+    su frappe -c "mkdir -p '${BACKUP_DIR}' && cd /home/frappe/frappe-bench && bench --site ${RFP_DOMAIN_NAME} backup --with-files --compress --backup-path '${BACKUP_DIR}'"
+    # Keep the three newest pre-migrate backups.
+    ls -1d "${PRE_MIGRATE_DIR}"/*/ 2>/dev/null | sort | head -n -3 | xargs -r rm -rf
+    if [ -n "${OFFSITE_BACKUP_BUCKET:-}" ]; then
+        echo "-> Offsite backup before migrating"
+        su frappe -c "/home/frappe/frappe-bench/offsite-backup.sh --once"
+    fi
+    echo "-> Migrating ${RFP_DOMAIN_NAME}"
+    su frappe -c "cd /home/frappe/frappe-bench && bench --site ${RFP_DOMAIN_NAME} migrate"
+    echo "$IMAGE_VERSIONS" | su frappe -c "cat > '${MIGRATED_MARKER}'"
+    echo "-> Migrated"
+fi
+
 # Install the apps built into the image on the site, once each: the Australian
 # localisation and strata_guard (report Company checks). Covers new sites and ones
 # created before an app was added to the image.
